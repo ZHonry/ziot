@@ -1,0 +1,30 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Configure Changsui PDU",
+                "description": "Enter the connection information and configuration options for your PDU",
+                "data": {
+                    "host": "Host",
+                    "username": "Username",
+                    "password": "Password",
+                    "outlets": "Number of Outlets",
+                    "pdu_name": "PDU Name",
+                    "show_outlet_current": "Show Outlet Current Sensors",
+                    "show_outlet_power": "Show Outlet Power Sensors",
+                    "show_current_limits": "Show Current Limits",
+                    "show_outlet_energy": "Show Outlet Energy Statistics",
+                    "scan_interval": "Scan Interval (seconds)"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Cannot connect to PDU",
+            "invalid_auth": "Invalid username or password",
+            "unknown": "Unknown error"
+        },
+        "abort": {
+            "already_configured": "This PDU is already configured"
+        }
+    }
+}

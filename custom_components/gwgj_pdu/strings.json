@@ -1,0 +1,18 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "配置 PDU Server",
+        "description": "设置 PDU TCP 服务器参数。PDU 设备连接后将自动注册。",
+        "data": {
+          "host": "监听地址",
+          "port": "监听端口",
+          "log_level": "日志级别"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "PDU Server 已配置"
+    }
+  }
+}

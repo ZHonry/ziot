@@ -1,0 +1,16 @@
+{
+  "domain": "changsui_pdu",
+  "name": "Changsui PDU",
+  "version": "2.0.0",
+  "documentation": "https://github.com/ZHonry/ziot",
+  "issue_tracker": "https://github.com/ZHonry/ziot/issues",
+  "requirements": [
+    "aiohttp"
+  ],
+  "codeowners": [
+    "@ZHonry"
+  ],
+  "config_flow": true,
+  "iot_class": "local_polling",
+  "icon": "icon"
+}

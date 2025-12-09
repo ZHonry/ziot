@@ -1,0 +1,30 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "配置昌遂PDU",
+                "description": "请输入 PDU 的连接信息和配置选项",
+                "data": {
+                    "host": "主机地址",
+                    "username": "用户名",
+                    "password": "密码",
+                    "outlets": "插座数量",
+                    "pdu_name": "PDU 名称",
+                    "show_outlet_current": "显示插座电流传感器",
+                    "show_outlet_power": "显示插座功率传感器",
+                    "show_current_limits": "显示负载上下限",
+                    "show_outlet_energy": "显示插座能耗统计",
+                    "scan_interval": "轮询间隔(秒)"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "无法连接到 PDU",
+            "invalid_auth": "用户名或密码错误",
+            "unknown": "未知错误"
+        },
+        "abort": {
+            "already_configured": "此 PDU 已配置"
+        }
+    }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "ZIoT - Home Assistant Integration Collection",
+  "content_in_root": false,
+  "country": "cn",
+  "homeassistant": "2023.0.0",
+  "render_readme": true
+}
