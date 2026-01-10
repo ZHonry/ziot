@@ -27,9 +27,13 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """设置 PDU Switch 平台"""
-    coordinator: PduCoordinator = hass.data[DOMAIN][DATA_COORDINATOR]
-    device_registry: DeviceRegistry = hass.data[DOMAIN][DATA_DEVICE_REGISTRY]
-    server = hass.data[DOMAIN][DATA_SERVER]
+
+    # ✅ 改为分层取值
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    coordinator: PduCoordinator = entry_data[DATA_COORDINATOR]
+    device_registry: DeviceRegistry = entry_data[DATA_DEVICE_REGISTRY]
+    server = entry_data[DATA_SERVER]
+
 
     # 为所有已注册的设备创建开关实体
     entities = []
@@ -50,8 +54,14 @@ async def async_setup_entry(
         async_add_entities(entities)
         _LOGGER.info(f"已添加 {len(entities)} 个 PDU 开关实体")
 
-    # 存储添加实体的回调,用于动态添加新设备
-    hass.data[DOMAIN]["add_switch_entities"] = async_add_entities
+    # ✅ 按 entry_id 层级保存
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
+    if entry.entry_id not in hass.data[DOMAIN]:
+        hass.data[DOMAIN][entry.entry_id] = {}
+
+    hass.data[DOMAIN][entry.entry_id]["add_switch_entities"] = async_add_entities
+
 
 
 class PduSwitch(CoordinatorEntity, SwitchEntity):

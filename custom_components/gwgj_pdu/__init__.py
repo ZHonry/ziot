@@ -24,7 +24,6 @@ PLATFORMS = [Platform.SWITCH, Platform.SENSOR]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """设置 PDU 集成"""
-    # 初始化数据存储
     hass.data.setdefault(DOMAIN, {})
 
     # 创建数据目录
@@ -33,7 +32,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # 创建协调器
     coordinator = PduCoordinator(hass)
-    
+    coordinator.config_entry = entry  # 重要：让 coordinator 能拿到 entry_id
+
     # 创建设备注册表
     device_registry = DeviceRegistry(hass, data_dir)
     await device_registry.async_load_devices()
@@ -41,10 +41,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # 创建 PDU Server
     server = PduServer(hass, coordinator, device_registry, entry.data)
 
-    # 存储到 hass.data
-    hass.data[DOMAIN][DATA_COORDINATOR] = coordinator
-    hass.data[DOMAIN][DATA_DEVICE_REGISTRY] = device_registry
-    hass.data[DOMAIN][DATA_SERVER] = server
+    # ⚙️ 关键：改为按 entry_id 分层存储
+    hass.data[DOMAIN][entry.entry_id] = {
+        DATA_COORDINATOR: coordinator,
+        DATA_DEVICE_REGISTRY: device_registry,
+        DATA_SERVER: server,
+    }
 
     # 启动 PDU Server
     await server.start()
@@ -55,32 +57,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # 注册更新监听器
     unsub = entry.add_update_listener(async_reload_entry)
-    hass.data[DOMAIN][DATA_UNSUB] = unsub
+    hass.data[DOMAIN][entry.entry_id][DATA_UNSUB] = unsub
 
     return True
 
 
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """卸载 PDU 集成"""
-    # 卸载平台
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    if unload_ok:
+    if unload_ok and DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
+        entry_data = hass.data[DOMAIN].pop(entry.entry_id)
+
         # 停止 PDU Server
-        server: PduServer = hass.data[DOMAIN].get(DATA_SERVER)
+        server: PduServer = entry_data.get(DATA_SERVER)
         if server:
             await server.stop()
             _LOGGER.info("PDU Server 已停止")
 
-        # 移除更新监听器
-        unsub = hass.data[DOMAIN].get(DATA_UNSUB)
+        # 移除监听器
+        unsub = entry_data.get(DATA_UNSUB)
         if unsub:
             unsub()
 
-        # 清理数据
-        hass.data[DOMAIN].clear()
-
     return unload_ok
+
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

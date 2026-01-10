@@ -14,6 +14,14 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_LOG_LEVEL,
 )
+from .const import (
+    CONF_FETCH_OUTLET_CURRENT,
+    CONF_WEB_USERNAME,
+    CONF_WEB_PASSWORD,
+    DEFAULT_FETCH_OUTLET_CURRENT,
+    DEFAULT_WEB_USERNAME,
+    DEFAULT_WEB_PASSWORD,
+)
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -42,6 +50,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_LOG_LEVEL, default=DEFAULT_LOG_LEVEL): vol.In(
                     ["debug", "info", "warning", "error", "critical"]
                 ),
+                vol.Required(
+                    CONF_FETCH_OUTLET_CURRENT, default=DEFAULT_FETCH_OUTLET_CURRENT
+                ): bool,
+                vol.Required(CONF_WEB_USERNAME, default=DEFAULT_WEB_USERNAME): str,
+                vol.Required(CONF_WEB_PASSWORD, default=DEFAULT_WEB_PASSWORD): str,
             }
         )
 

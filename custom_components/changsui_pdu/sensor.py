@@ -158,9 +158,12 @@ class PDUMainSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{device_info['identifiers']}_{key}"
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = device_class
-        self._attr_state_class = (
-            SensorStateClass.MEASUREMENT if device_class != SensorDeviceClass.POWER_FACTOR else None
-        )
+        if device_class == SensorDeviceClass.ENERGY:
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        elif device_class == SensorDeviceClass.POWER_FACTOR:
+             self._attr_state_class = None
+        else:
+            self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_device_info = device_info
         self._attr_has_entity_name = True
 

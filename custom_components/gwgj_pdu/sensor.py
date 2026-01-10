@@ -71,17 +71,18 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """设置 PDU Sensor 平台"""
-    coordinator: PduCoordinator = hass.data[DOMAIN][DATA_COORDINATOR]
-    device_registry: DeviceRegistry = hass.data[DOMAIN][DATA_DEVICE_REGISTRY]
+
+    # ❗ 取出本 entry 对应的数据
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    coordinator: PduCoordinator = entry_data[DATA_COORDINATOR]
+    device_registry: DeviceRegistry = entry_data[DATA_DEVICE_REGISTRY]
 
     # 为所有已注册的设备创建传感器实体
-    # 注意:初始时可能没有传感器数据,实体会在接收到数据后动态创建
     entities = []
     for pdu_id, device_config in device_registry.get_all_devices().items():
-        # 获取已知的传感器类型
         available_sensors = coordinator.get_available_sensors(pdu_id)
         for sensor_type in available_sensors:
-            if sensor_type in SENSOR_CONFIGS:
+            if sensor_type in SENSOR_CONFIGS or sensor_type.startswith("current_"):
                 entities.append(
                     PduSensor(
                         coordinator=coordinator,
@@ -95,8 +96,14 @@ async def async_setup_entry(
         async_add_entities(entities)
         _LOGGER.info(f"已添加 {len(entities)} 个 PDU 传感器实体")
 
-    # 存储添加实体的回调,用于动态添加新传感器
-    hass.data[DOMAIN]["add_sensor_entities"] = async_add_entities
+    # 保存回调供 coordinator 动态添加使用
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
+    if entry.entry_id not in hass.data[DOMAIN]:
+        hass.data[DOMAIN][entry.entry_id] = {}
+    hass.data[DOMAIN][entry.entry_id]["add_sensor_entities"] = async_add_entities
+
+
 
 
 class PduSensor(CoordinatorEntity, SensorEntity):
@@ -105,32 +112,38 @@ class PduSensor(CoordinatorEntity, SensorEntity):
     def __init__(
         self,
         coordinator: PduCoordinator,
-        device_registry: DeviceRegistry,
+        device_registry: DeviceRegistry, # 确保参数在这里
         pdu_id: str,
         sensor_type: str,
     ):
-        """初始化传感器实体
-        
-        Args:
-            coordinator: 数据协调器
-            device_registry: 设备注册表
-            pdu_id: PDU 设备 ID
-            sensor_type: 传感器类型
-        """
+        """初始化传感器实体"""
         super().__init__(coordinator)
-        self._device_registry = device_registry
+        # --- 关键修复：确保这两行存在且赋值正确 ---
+        self._device_registry = device_registry 
         self._pdu_id = pdu_id
+        # ------------------------------------
+        
         self._sensor_type = sensor_type
         self._attr_has_entity_name = True
 
-        # 从配置中获取传感器属性
-        config = SENSOR_CONFIGS.get(sensor_type, {})
-        self._attr_device_class = config.get("device_class")
-        self._attr_native_unit_of_measurement = config.get("unit")
-        self._attr_state_class = config.get("state_class")
-        self._attr_icon = config.get("icon")
-        self._sensor_name = config.get("name", sensor_type)
+        # 下面是你提供的逻辑：处理分口电流名称
+        config = SENSOR_CONFIGS.get(sensor_type)
+        if not config and sensor_type.startswith("current_"):
+            config = SENSOR_CONFIGS.get(SENSOR_TYPE_CURRENT, {})
+            try:
+                idx = int(sensor_type.split("_")[1])
+                self._sensor_name = f"插座 {idx} 电流"
+            except Exception:
+                self._sensor_name = "插座 电流"
+        else:
+            self._sensor_name = config.get("name", sensor_type) if config else sensor_type
 
+        # 设置属性
+        self._attr_device_class = config.get("device_class") if config else None
+        self._attr_native_unit_of_measurement = config.get("unit") if config else None
+        self._attr_state_class = config.get("state_class") if config else None
+        self._attr_icon = config.get("icon") if config else None
+        
     @property
     def unique_id(self) -> str:
         """返回唯一 ID"""

@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "配置 PDU 服务器",
+        "description": "设置 PDU TCP 服务器参数。PDU 设备连接后将自动注册到 Home Assistant。",
+        "data": {
+          "host": "监听地址 (通常保持 0.0.0.0)",
+          "port": "监听端口",
+          "log_level": "日志级别",
+          "fetch_outlet_current": "启用 Web 抓取分口电流",
+          "web_username": "Web 登录用户名",
+          "web_password": "Web 登录密码"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "PDU Server 已经配置过了。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "修改 PDU 设置",
+        "data": {
+          "log_level": "日志级别",
+          "fetch_outlet_current": "启用 Web 抓取分口电流"
+        }
+      }
+    }
+  }
+}

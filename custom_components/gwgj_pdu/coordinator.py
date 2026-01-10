@@ -1,6 +1,7 @@
 """PDU 数据协调器"""
 import logging
 from typing import Dict, Any, Optional
+from .const import DOMAIN, DATA_DEVICE_REGISTRY
 from datetime import timedelta
 import time
 
@@ -114,30 +115,62 @@ class PduCoordinator(DataUpdateCoordinator):
         return True
 
     def update_sensor_data(
-        self,
-        pdu_id: str,
-        sensor_type: str,
-        value: Any
-    ):
-        """更新传感器数据
-        
-        Args:
-            pdu_id: PDU 设备 ID
-            sensor_type: 传感器类型 (power, current, voltage, temperature)
-            value: 传感器值
-        """
-        if pdu_id not in self.data:
-            self.init_pdu(pdu_id)
+            self,
+            pdu_id: str,
+            sensor_type: str,
+            value: Any
+        ):
+            """更新传感器数据"""
+            if pdu_id not in self.data:
+                self.init_pdu(pdu_id)
 
-        # 记录传感器类型(用于动态创建实体)
-        if "_available_sensors" in self.data[pdu_id]:
-            self.data[pdu_id]["_available_sensors"].add(sensor_type)
+            # --- 修复开始：定义 is_new 逻辑 ---
+            is_new = False
+            if "_available_sensors" in self.data[pdu_id]:
+                if sensor_type not in self.data[pdu_id]["_available_sensors"]:
+                    is_new = True
+                    self.data[pdu_id]["_available_sensors"].add(sensor_type)
+            # --- 修复结束 ---
 
-        self.data[pdu_id][sensor_type] = value
-        
-        # 通知订阅者
-        self.async_set_updated_data(self.data)
-        _LOGGER.debug(f"PDU {pdu_id} {sensor_type} -> {value}")
+            self.data[pdu_id][sensor_type] = value
+            
+            # 通知订阅者
+            self.async_set_updated_data(self.data)
+            _LOGGER.debug(f"PDU {pdu_id} {sensor_type} -> {value}")
+
+            try:
+                # 只有当这是新发现的传感器，且是电流类型时，才尝试动态注册实体
+                if (
+                    DOMAIN in self.hass.data
+                    and hasattr(self, "config_entry")
+                    and self.config_entry 
+                    and is_new  # 现在 is_new 已正确定义
+                    and (sensor_type.startswith("current_") or sensor_type in ["power", "current", "voltage"])
+                ):
+                    entry_id = self.config_entry.entry_id
+                    if entry_id in self.hass.data[DOMAIN] and "add_sensor_entities" in self.hass.data[DOMAIN][entry_id]:
+                        async_add_entities = self.hass.data[DOMAIN][entry_id]["add_sensor_entities"]
+
+                        async def _add_new_sensor(_):
+                            """延迟注册新的电流传感器实体"""
+                            from .sensor import PduSensor
+                            device_registry = self.hass.data[DOMAIN][entry_id].get(DATA_DEVICE_REGISTRY)
+
+                            new_entity = PduSensor(
+                                coordinator=self,
+                                device_registry=device_registry,
+                                pdu_id=pdu_id,
+                                sensor_type=sensor_type,
+                            )
+                            _LOGGER.info(f"[gwgj_pdu] 自动注册 PDU 电流传感器: {pdu_id} - {sensor_type}")
+                            async_add_entities([new_entity])
+
+                        from homeassistant.helpers.event import async_call_later
+                        async_call_later(self.hass, 0.1, _add_new_sensor)
+
+            except Exception as e:
+                _LOGGER.debug(f"[gwgj_pdu] 自动注册新传感器实体失败: {e}")
+
 
     def update_all_switches(self, pdu_id: str, io_value: int):
         """根据 IO 值更新所有开关状态

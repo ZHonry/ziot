@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, Any
 
 _LOGGER = logging.getLogger(__name__)
 
-
 class PDUClient:
     """PDU HTTP 客户端,支持会话管理和错误恢复"""
 
@@ -26,6 +25,14 @@ class PDUClient:
         self.outlets = outlets
         self.session: Optional[aiohttp.ClientSession] = None
         self._logged_in = False
+
+    def _parse_value(self, raw_value: str, scale: float = 1.0) -> float:
+        """解析带 'd' 后缀的数值并缩放"""
+        try:
+            val = int(raw_value.replace("d", "").strip())
+            return val / scale
+        except (ValueError, AttributeError):
+            return 0.0
 
     async def ensure_logged_in(self):
         """确保已登录,如果未登录则自动登录"""
@@ -52,13 +59,6 @@ class PDUClient:
                 )
 
                 async with self.session.get(login_url) as resp:
-                    text = await resp.text()
-                    _LOGGER.debug(
-                        "[Login] status=%s, response(first 200 chars)=%s",
-                        resp.status,
-                        text[:200],
-                    )
-
                     if resp.status == 200:
                         # 注入 Cookie
                         self.session.cookie_jar.update_cookies(
@@ -67,12 +67,15 @@ class PDUClient:
                                 "password": self.password,
                                 "lg": "0",
                                 "inst": "0",
-                                "outlet_index": "16",
+                                "outlet_index": str(self.outlets), # Use instance outlet count
                             }
                         )
                         self._logged_in = True
                         _LOGGER.info("成功登录到 PDU %s", self.host)
                         return True
+                    else:
+                        text = await resp.text()
+                        _LOGGER.debug(f"[Login] Failed status={resp.status} body={text[:100]}")
 
             except Exception as e:
                 _LOGGER.warning("登录尝试 %d 失败: %s", attempt + 1, e)
@@ -99,50 +102,36 @@ class PDUClient:
                     return []
 
                 text = await resp.text()
-                if _LOGGER.isEnabledFor(logging.DEBUG):
-                    _LOGGER.debug(
-                        "[Get Outlet Status] resp.status=%s, sample=%s",
-                        resp.status,
-                        "\n".join(text.splitlines()[:8]),
-                    )
-
                 lines = text.strip().split("\n")
                 
                 # 根据插座数量确定数据起始行
-                # 20孔: 第2行是"20d",数据从第3行开始
-                # 16孔: 第3行是"16d",数据从第4行开始
-                if self.outlets == 20:
-                    data_start_line = 3
-                else:
-                    data_start_line = 4
+                data_start_line = 3 if self.outlets == 20 else 4
                 
                 # 提取插座数据
                 data_lines = lines[data_start_line:-1]
                 # 每个插座占11行
-                chunks = [data_lines[i : i + 11] for i in range(0, len(data_lines), 11)]
-                
-                _LOGGER.debug(
-                    "总数据行: %d, 数据块大小: 11, 预计插座数: %d",
-                    len(data_lines),
-                    len(data_lines) // 11
-                )
+                chunk_size = 11
+                if len(data_lines) % chunk_size != 0:
+                     # 尝试容错: 也许只有 10 行？或者根据 outlets 数量反推
+                     _LOGGER.debug(f"数据行数 {len(lines)} 可能不匹配预期")
+
+                chunks = [data_lines[i : i + chunk_size] for i in range(0, len(data_lines), chunk_size)]
                 
                 outlet_data = []
                 for chunk in chunks:
+                    if len(chunk) < 4: continue
                     try:
                         name = chunk[0]
                         state = 1 - int(chunk[1].replace("d", ""))
-                        current = int(chunk[2].replace("d", "")) / 100
-                        power = int(chunk[3].replace("d", ""))
+                        current = self._parse_value(chunk[2], 100.0)
+                        power = self._parse_value(chunk[3], 1.0) # Power is raw watts?
                         
                         # 尝试解析负载限制(可选)
                         current_min = None
                         current_max = None
-                        try:
-                            current_min = int(chunk[4].replace("d", "")) / 100
-                            current_max = int(chunk[5].replace("d", "")) / 100
-                        except:
-                            pass
+                        if len(chunk) > 5:
+                            current_min = self._parse_value(chunk[4], 100.0)
+                            current_max = self._parse_value(chunk[5], 100.0)
                         
                         outlet_data.append(
                             {
@@ -155,7 +144,7 @@ class PDUClient:
                             }
                         )
                     except (ValueError, IndexError) as e:
-                        _LOGGER.warning("解析插座数据失败: %s, chunk=%s", e, chunk[:4] if len(chunk) >= 4 else chunk)
+                        _LOGGER.warning("解析插座数据失败: %s", e)
                         continue
 
                 return outlet_data
@@ -166,11 +155,7 @@ class PDUClient:
             return []
 
     async def get_pdu_overview(self) -> Dict[str, Any]:
-        """获取 PDU 电参总览
-        
-        Returns:
-            包含 voltage, current, total_power, power_factor, total_energy 的字典
-        """
+        """获取 PDU 电参总览"""
         await self.ensure_logged_in()
 
         try:
@@ -181,31 +166,18 @@ class PDUClient:
                     return {}
 
                 text = await resp.text()
-                if _LOGGER.isEnabledFor(logging.DEBUG):
-                    _LOGGER.debug(
-                        "[PDU Overview] resp.status=%s, sample=%s",
-                        resp.status,
-                        "\n".join(text.splitlines()[:8]),
-                    )
-
                 lines = text.strip().split("\n")
 
                 if len(lines) < 8:
                     _LOGGER.error("PDU 总览响应格式无效")
                     return {}
 
-                voltage = int(lines[4].replace("d", "")) / 10
-                current = int(lines[3].replace("d", "")) / 100
-                total_power = int(lines[5].replace("d", ""))
-                power_factor = int(lines[6].replace("d", "")) / 1000
-                total_energy = int(lines[7].replace("d", "")) / 100
-
                 return {
-                    "voltage": voltage,
-                    "current": current,
-                    "total_power": total_power,
-                    "power_factor": power_factor,
-                    "total_energy": total_energy,
+                    "voltage": self._parse_value(lines[4], 10.0),
+                    "current": self._parse_value(lines[3], 100.0),
+                    "total_power": self._parse_value(lines[5], 1.0),
+                    "power_factor": self._parse_value(lines[6], 1000.0),
+                    "total_energy": self._parse_value(lines[7], 100.0),
                 }
 
         except (aiohttp.ClientError, ValueError, IndexError) as e:
@@ -215,11 +187,7 @@ class PDUClient:
             return {}
 
     async def get_daily_energy(self) -> Dict[str, Any]:
-        """获取当天能耗数据
-        
-        Returns:
-            包含 total 和 outlets 的字典
-        """
+        """获取当天能耗数据"""
         await self.ensure_logged_in()
 
         try:
@@ -232,55 +200,38 @@ class PDUClient:
 
             async with self.session.get(url) as resp:
                 if resp.status != 200:
-                    _LOGGER.error("获取每日能耗失败: HTTP %s", resp.status)
                     return {"total": {}, "outlets": []}
 
                 text = await resp.text()
-                if _LOGGER.isEnabledFor(logging.DEBUG):
-                    _LOGGER.debug(
-                        "[Daily Energy] resp.status=%s, sample=%s",
-                        resp.status,
-                        "\n".join(text.splitlines()[:8]),
-                    )
-
                 lines = text.strip().split("\n")
 
                 if len(lines) < 4:
-                    _LOGGER.error("每日能耗响应格式无效")
                     return {"total": {}, "outlets": []}
 
                 total_data = lines[3].split(",")
-                total_start = int(total_data[0].replace("d", "")) / 100
-                total_end = int(total_data[1].replace("d", "")) / 100
-                total_today = int(total_data[2].replace("d", "")) / 100
+                total_val = {
+                    "start": self._parse_value(total_data[0], 100.0),
+                    "end": self._parse_value(total_data[1], 100.0),
+                    "today": self._parse_value(total_data[2], 100.0),
+                }
 
                 outlet_energy = []
                 for entry in lines[4:-1]:
                     try:
                         parts = entry.split(",")
-                        name = parts[0]
-                        start = int(parts[1].replace("d", "")) / 100
-                        end = int(parts[2].replace("d", "")) / 100
-                        today = int(parts[3].replace("d", "")) / 100
-
                         outlet_energy.append(
                             {
-                                "name": name,
-                                "start": start,
-                                "end": end,
-                                "today": today,
+                                "name": parts[0],
+                                "start": self._parse_value(parts[1], 100.0),
+                                "end": self._parse_value(parts[2], 100.0),
+                                "today": self._parse_value(parts[3], 100.0),
                             }
                         )
-                    except (ValueError, IndexError) as e:
-                        _LOGGER.warning("解析插座能耗数据失败: %s", e)
+                    except (ValueError, IndexError):
                         continue
 
                 return {
-                    "total": {
-                        "start": total_start,
-                        "end": total_end,
-                        "today": total_today,
-                    },
+                    "total": total_val,
                     "outlets": outlet_energy,
                 }
 
@@ -296,13 +247,9 @@ class PDUClient:
         Args:
             outlet_idx: 插座编号 (1-based)
             state: 1=开, 0=关
-            
-        Returns:
-            是否成功
         """
         await self.ensure_logged_in()
 
-        # 计算参数
         idx = 1 - state
         outlet_key = f"t{outlet_idx - 1:02d}"
         data = {"pdu_index": "0", "idx": str(idx), outlet_key: "1"}
@@ -318,70 +265,35 @@ class PDUClient:
             try:
                 async with self.session.post(url, data=data, headers=headers) as resp:
                     text = await resp.text()
-                    _LOGGER.debug(
-                        "[尝试 %s] outlet=%s state=%s status=%s body_sample=%s",
-                        attempt,
-                        outlet_idx,
-                        state,
-                        resp.status,
-                        text[:200],
-                    )
-
-                    # 成功条件
                     if resp.status == 200 and ("success" in text or "succesd" in text):
-                        _LOGGER.info(
-                            "插座 %s 设置为状态 %s 成功(尝试 %s 次)",
-                            outlet_idx,
-                            state,
-                            attempt,
-                        )
+                        _LOGGER.info(f"插座 {outlet_idx} 设置为 {state} 成功")
                         return True
 
             except aiohttp.ClientError as e:
                 _LOGGER.warning("尝试 %s 失败,插座 %s: %s", attempt, outlet_idx, e)
 
-            # 指数退避
             if attempt < 3:
                 await asyncio.sleep(2 ** (attempt - 1))
 
-        _LOGGER.error(
-            "控制插座 %s (state=%s) 失败,已尝试 3 次",
-            outlet_idx,
-            state,
-        )
+        _LOGGER.error("控制插座 %s (state=%s) 失败,已尝试 3 次", outlet_idx, state)
         return False
 
     async def get_outlet_energy(self) -> List[Dict[str, Any]]:
-        """获取插座总能耗
-        
-        Returns:
-            包含每个插座能耗的列表，格式: [{"name": "Outlet1", "energy": 6.08}, ...]
-        """
+        """获取插座总能耗"""
         await self.ensure_logged_in()
 
         try:
             url = f"http://{self.host}/outenergy.cgi?pdu_index=0"
             async with self.session.get(url) as resp:
                 if resp.status != 200:
-                    _LOGGER.error("获取插座能耗失败: HTTP %s", resp.status)
                     return []
 
                 text = await resp.text()
-                if _LOGGER.isEnabledFor(logging.DEBUG):
-                    _LOGGER.debug(
-                        "[Get Outlet Energy] resp.status=%s, sample=%s",
-                        resp.status,
-                        "\n".join(text.splitlines()[:8]),
-                    )
-
                 lines = text.strip().split("\n")
                 
                 if len(lines) < 4:
-                    _LOGGER.error("插座能耗响应格式无效")
                     return []
 
-                # 第3行是插座数量
-                # 从第4行开始，每个插座占2行：名称 + 能耗值
                 outlet_energy = []
                 data_lines = lines[3:]  # 跳过前3行
                 
@@ -389,19 +301,15 @@ class PDUClient:
                 for i in range(0, len(data_lines) - 1, 2):
                     try:
                         name = data_lines[i].replace("d", "").strip()
-                        energy_value = int(data_lines[i + 1].replace("d", "").strip())
-                        # 能耗单位是 kWh，需要除以100（根据其他API的模式）
-                        energy_kwh = energy_value / 100
+                        energy_kwh = self._parse_value(data_lines[i + 1], 100.0)
                         
                         outlet_energy.append({
                             "name": name,
                             "energy": energy_kwh,
                         })
-                    except (ValueError, IndexError) as e:
-                        _LOGGER.warning("解析插座能耗数据失败: %s", e)
+                    except (ValueError, IndexError):
                         continue
 
-                _LOGGER.debug("成功获取 %d 个插座的能耗数据", len(outlet_energy))
                 return outlet_energy
 
         except aiohttp.ClientError as e:

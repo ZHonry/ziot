@@ -2,17 +2,17 @@
   "config": {
     "step": {
       "user": {
-        "title": "配置 PDU Server",
-        "description": "设置 PDU TCP 服务器参数。PDU 设备连接后将自动注册。",
+        "title": "PDU Server Configuration",
+        "description": "Set up the TCP server for PDU devices.",
         "data": {
-          "host": "监听地址",
-          "port": "监听端口",
-          "log_level": "日志级别"
+          "host": "Listen IP",
+          "port": "Port",
+          "log_level": "Log Level",
+          "fetch_outlet_current": "Fetch Outlet Current via Web",
+          "web_username": "Web Username",
+          "web_password": "Web Password"
         }
       }
-    },
-    "abort": {
-      "already_configured": "PDU Server 已配置"
     }
   }
 }

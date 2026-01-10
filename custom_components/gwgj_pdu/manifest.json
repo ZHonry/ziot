@@ -1,7 +1,7 @@
 {
   "domain": "gwgj_pdu",
   "name": "GWGJ PDU",
-  "version": "2.0.0",
+  "version": "2.0.3",
   "documentation": "https://github.com/ZHonry/ziot",
   "issue_tracker": "https://github.com/ZHonry/ziot/issues",
   "config_flow": true,
