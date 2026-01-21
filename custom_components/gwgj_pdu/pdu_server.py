@@ -1,6 +1,5 @@
 """PDU TCP Server - 无 MQTT 版本"""
 import asyncio
-import asyncio
 import logging
 import aiohttp
 import re
@@ -238,7 +237,7 @@ class PduServer:
         2. (Sec 2.2) START PVC ... P='0' A='0' V='22249' ... (A/1000?, V/100)
         """
         # 保持警告日志以便您确认
-        _LOGGER.warning(f"[PVC_DEBUG] Raw msg: {msg}")
+        _LOGGER.debug(f"[PVC_DEBUG] Raw msg: {msg}")
         
         # 1. 功率 (p/P)
         p_match = re.search(r"[\s]([Pp])='(\d+)'", " " + msg) # Hack: prepend space to msg to simplify regex
@@ -279,7 +278,7 @@ class PduServer:
             if a_match:
                 try:
                     val = int(a_match.group(2))
-                    current = round(val / 1000.0, 3) # 猜测 /1000
+                    current = round(val / 100.0, 3) # 根据日志 A='121' 对应 1.21A
                     self.coordinator.update_sensor_data(pdu_id, "current", current)
                 except Exception: pass
 
@@ -306,31 +305,7 @@ class PduServer:
                 self.coordinator.update_sensor_data(pdu_id, f"current_{switch_idx}", current_val)
             except Exception: pass
 
-        # 4. 电能 (e)
-        e_match = re.search(r" e='([\d\.]+)'", msg) # 电能可能是小数? 协议只说 e:电能
-        if e_match:
-             try:
-                energy = float(e_match.group(1))
-                # 如果 coordinator 支持 energy
-                self.coordinator.update_sensor_data(pdu_id, "energy", energy)
-             except Exception: pass
 
-        # 5. 分路电流 (c0 - c7) -> /100
-        # 协议文档里写 C0-c7，可能是大小写混合，这里匹配 c(\d)
-        # 注意: 之前的代码逻辑是 current_1 到 current_8
-        # c0 对应 current_1 ? 协议说 "io为要开/关的插座口(1-8)"
-        # 假设 c0 -> 1, c7 -> 8
-        c_matches = re.finditer(r" [Cc](\d+)='(\d+)'", msg)
-        for m in c_matches:
-            try:
-                idx = int(m.group(1)) # 0-7
-                val = int(m.group(2))
-                current_val = round(val / 100.0, 3)
-                
-                # 映射到 entity id (1-8)
-                switch_idx = idx + 1
-                self.coordinator.update_sensor_data(pdu_id, f"current_{switch_idx}", current_val)
-            except Exception: pass
     async def _fetch_outlet_currents(self, pdu_id: str, peer):
         """后台抓取分口电流 (Raw Socket 模式，因为设备不返回标准 HTTP 头)"""
         host_ip = peer[0] if isinstance(peer, (tuple, list)) else str(peer)
@@ -421,9 +396,22 @@ class PduServer:
                     buffer += chunk.decode(errors="ignore")
 
                     while "END" in buffer:
-                        end_pos = buffer.find("END") + 3
-                        msg = buffer[:end_pos].strip()
-                        buffer = buffer[end_pos:]
+                        start_pos = buffer.find("START")
+                        if start_pos == -1:
+                            # 没找到 START，但有 END，抛弃 END 及之前的内容
+                            buffer = buffer[buffer.find("END") + 3:]
+                            continue
+                        
+                        # 丢弃 START 之前的所有字符 (如 S\n)
+                        buffer = buffer[start_pos:]
+                        
+                        end_pos = buffer.find("END")
+                        if end_pos == -1:
+                            # START 有了，但 END 还没到，等待更多数据
+                            break
+                            
+                        msg = buffer[:end_pos + 3].strip()
+                        buffer = buffer[end_pos + 3:]
 
                         if not pdu_id:
                             # 登录阶段
