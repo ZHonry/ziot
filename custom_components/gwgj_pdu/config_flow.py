@@ -13,8 +13,11 @@ from .const import (
     DEFAULT_HOST,
     DEFAULT_PORT,
     DEFAULT_LOG_LEVEL,
-)
-from .const import (
+    CONF_PROTOCOL,
+    PROTOCOL_SERVER,
+    PROTOCOL_CLIENT,
+    CONF_PASSWORD,
+    DEFAULT_PASSWORD,
     CONF_FETCH_OUTLET_CURRENT,
     CONF_WEB_USERNAME,
     CONF_WEB_PASSWORD,
@@ -32,12 +35,25 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
-        """处理用户初始配置"""
+        """选择协议模式"""
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=["server_config", "client_config"]
+        )
+
+    async def async_step_server_config(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """配置 TCP Server 模式"""
+        errors = {}
         if user_input is not None:
-            # 检查是否已存在配置
-            await self.async_set_unique_id(DOMAIN)
+            # 对于 Server 模式，只能有一个实例
+            # 检查是否已有 Server 实例 (unique_id='server' 或 DOMAIN)
+            # 这里我们使用 'server' 作为新的标准 ID
+            await self.async_set_unique_id("gwgj_pdu_server")
             self._abort_if_unique_id_configured()
 
+            user_input[CONF_PROTOCOL] = PROTOCOL_SERVER
             return self.async_create_entry(
                 title="PDU Server",
                 data=user_input,
@@ -58,4 +74,42 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
-        return self.async_show_form(step_id="user", data_schema=data_schema)
+        return self.async_show_form(
+            step_id="server_config", 
+            data_schema=data_schema,
+            errors=errors
+        )
+
+    async def async_step_client_config(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """配置 HTTP Client 模式"""
+        errors = {}
+        if user_input is not None:
+            # 对于 Client 模式，唯一 ID 为 host:port
+            unique_id = f"client_{user_input[CONF_HOST]}_{user_input[CONF_PORT]}"
+            await self.async_set_unique_id(unique_id)
+            self._abort_if_unique_id_configured()
+
+            user_input[CONF_PROTOCOL] = PROTOCOL_CLIENT
+            return self.async_create_entry(
+                title=f"PDU Client {user_input[CONF_HOST]}",
+                data=user_input,
+            )
+
+        data_schema = vol.Schema(
+            {
+                vol.Required(CONF_HOST): str,
+                vol.Required(CONF_PORT, default=80): int,
+                vol.Required(CONF_PASSWORD, default=DEFAULT_PASSWORD): str,
+                vol.Required(CONF_LOG_LEVEL, default=DEFAULT_LOG_LEVEL): vol.In(
+                    ["debug", "info", "warning", "error", "critical"]
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="client_config", 
+            data_schema=data_schema,
+            errors=errors
+        )

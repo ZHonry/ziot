@@ -2,17 +2,37 @@
   "config": {
     "step": {
       "user": {
-        "title": "PDU Server Configuration",
-        "description": "Set up the TCP server for PDU devices.",
+        "title": "选择连接模式",
+        "menu_options": {
+          "server_config": "Server 模式 (被动接收连接)",
+          "client_config": "Client 模式 (主动连接设备)"
+        }
+      },
+      "server_config": {
+        "title": "配置 PDU Server",
+        "description": "设置 PDU TCP 服务器参数。PDU 设备连接后将自动注册。",
         "data": {
-          "host": "Listen IP",
-          "port": "Port",
-          "log_level": "Log Level",
-          "fetch_outlet_current": "Fetch Outlet Current via Web",
-          "web_username": "Web Username",
-          "web_password": "Web Password"
+          "host": "监听地址",
+          "port": "监听端口",
+          "log_level": "日志级别",
+          "fetch_outlet_current": "抓取分口电流 (仅 HTTP)",
+          "web_username": "Web 用户名",
+          "web_password": "Web 密码"
+        }
+      },
+      "client_config": {
+        "title": "配置 PDU Client",
+        "description": "设置远程 PDU 设备连接信息。",
+        "data": {
+          "host": "PDU IP 地址",
+          "port": "Web 端口 (默认 80)",
+          "password": "密码",
+          "log_level": "日志级别"
         }
       }
+    },
+    "abort": {
+      "already_configured": "该设备已配置"
     }
   }
 }

@@ -12,6 +12,12 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 4600
 DEFAULT_LOG_LEVEL = "info"
 DEFAULT_NUM_SWITCHES = 8
+
+# 可选通过 Web 抓取每个插座电流
+CONF_FETCH_OUTLET_CURRENT = "fetch_outlet_current"
+CONF_WEB_USERNAME = "web_username"
+CONF_WEB_PASSWORD = "web_password"
+
 DEFAULT_FETCH_OUTLET_CURRENT = False
 DEFAULT_WEB_USERNAME = "admin"
 DEFAULT_WEB_PASSWORD = "admin"
@@ -24,11 +30,6 @@ CONF_NAME = "name"
 CONF_SW_VERSION = "sw_version"
 CONF_CONFIGURATION_URL = "configuration_url"
 CONF_NUM_SWITCHES = "num_switches"
-
-# 可选通过 Web 抓取每个插座电流
-CONF_FETCH_OUTLET_CURRENT = "fetch_outlet_current"
-CONF_WEB_USERNAME = "web_username"
-CONF_WEB_PASSWORD = "web_password"
 
 # 默认设备配置
 DEFAULT_MANUFACTURER = "Generic"
@@ -46,3 +47,13 @@ DATA_COORDINATOR = "coordinator"
 DATA_DEVICE_REGISTRY = "device_registry"
 DATA_SERVER = "server"
 DATA_UNSUB = "unsub"
+
+# 协议类型
+CONF_PROTOCOL = "protocol"
+PROTOCOL_SERVER = "server"  # TCP Server Mode (Passive)
+PROTOCOL_CLIENT = "client"  # HTTP Client Mode (Active)
+
+# 客户端配置
+CONF_PASSWORD = "password"
+DEFAULT_PASSWORD = "admin"
+

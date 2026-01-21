@@ -2,31 +2,37 @@
   "config": {
     "step": {
       "user": {
-        "title": "配置 PDU 服务器",
-        "description": "设置 PDU TCP 服务器参数。PDU 设备连接后将自动注册到 Home Assistant。",
+        "title": "选择连接模式",
+        "menu_options": {
+          "server_config": "Server 模式 (被动接收连接)",
+          "client_config": "Client 模式 (主动连接设备)"
+        }
+      },
+      "server_config": {
+        "title": "配置 PDU Server",
+        "description": "设置 PDU TCP 服务器参数。PDU 设备连接后将自动注册。",
         "data": {
-          "host": "监听地址 (通常保持 0.0.0.0)",
+          "host": "监听地址",
           "port": "监听端口",
           "log_level": "日志级别",
-          "fetch_outlet_current": "启用 Web 抓取分口电流",
-          "web_username": "Web 登录用户名",
-          "web_password": "Web 登录密码"
+          "fetch_outlet_current": "抓取分口电流 (仅 HTTP)",
+          "web_username": "Web 用户名",
+          "web_password": "Web 密码"
+        }
+      },
+      "client_config": {
+        "title": "配置 PDU Client",
+        "description": "设置远程 PDU 设备连接信息。",
+        "data": {
+          "host": "PDU IP 地址",
+          "port": "Web 端口 (默认 80)",
+          "password": "密码",
+          "log_level": "日志级别"
         }
       }
     },
     "abort": {
-      "already_configured": "PDU Server 已经配置过了。"
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "修改 PDU 设置",
-        "data": {
-          "log_level": "日志级别",
-          "fetch_outlet_current": "启用 Web 抓取分口电流"
-        }
-      }
+      "already_configured": "该设备已配置"
     }
   }
 }
