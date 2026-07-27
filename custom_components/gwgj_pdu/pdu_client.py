@@ -45,7 +45,6 @@ class PduClient:
         self.log_level = getattr(logging, log_level, logging.INFO)
         _LOGGER.setLevel(self.log_level)
 
-        self.session: Optional[aiohttp.ClientSession] = None
         self.remove_timer = None
         
         # Client mode only supports ONE PDU per instance
@@ -220,27 +219,13 @@ class PduClient:
         # Node-RED gets status by regex on page content.
         # Just visiting the page might return the status in 'var classtemp'
         
-        # Dummy payload or login payload to get the page?
-        # Node-RED "获取PDU状态" uses a big payload similar to control but no button press?
-        # Actually, simple login or empty post might get the page.
-        # Let's try sending login info.
+        # 状态轮询使用"无动作"payload：只带登录身份，不带任何按钮/控制字段。
+        # 旧版 payload 携带 save_handcontrol_btn="td2_1" + radio_function="0"，
+        # 与控制开关 1 的报文完全相同，存在每 5 秒误触开关 1 的风险，已移除。
+        # 若实测发现设备不再返回 classtemp 状态页，说明该型号要求完整表单，
+        # 可回退为带 aircond_* 等字段但【不带 save_handcontrol_btn】的表单再测。
         status_payload = {
             "login_username": self.username,
-            "save_handcontrol_btn": "td2_1", # 注意：如果这会导致开关动作，请检查是否可以改为无动作的 key
-            "radio_function": "0",
-            "socket_check0": "0",
-            "aircond_type": "0",
-            "aircond_model": "0",
-            "aircond_temperature": "24",
-            "aircond_action": "1",
-            "radio_function_1": "0",
-            "radio_function_2": "0",
-            "radio_function_3": "0",
-            "radio_function_4": "0",
-            "radio_function_5": "0",
-            "radio_function_6": "0",
-            "radio_function_7": "0",
-            "radio_function_8": "0",
             "is_mobile": "1"
         }
         

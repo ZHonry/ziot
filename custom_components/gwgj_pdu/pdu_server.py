@@ -52,8 +52,8 @@ class PduServer:
         self.port = config.get("port", 4600)
         
         # Web 抓取配置
-        # 默认启用，以恢复原有功能
-        self.fetch_outlet_current = config.get(CONF_FETCH_OUTLET_CURRENT, True)
+        # 默认值与配置流保持一致(False)；经 UI 创建的条目均显式携带此项
+        self.fetch_outlet_current = config.get(CONF_FETCH_OUTLET_CURRENT, False)
         self.web_username = config.get(CONF_WEB_USERNAME, "admin")
         self.web_password = config.get(CONF_WEB_PASSWORD, "admin")
         
@@ -418,7 +418,11 @@ class PduServer:
                             match = re.search(r"id='([^']+)'", msg)
                             if match:
                                 pdu_id = match.group(1)
-                                
+
+                                # 记录是否为全新设备：老设备的实体已在平台
+                                # setup 时创建，重复动态创建会产生 unique_id 冲突警告
+                                is_new_device = not self.device_registry.is_device_registered(pdu_id)
+
                                 # 注册设备(自动创建)
                                 await self.device_registry.async_register_device(pdu_id, auto_create=True)
                                 
@@ -439,9 +443,13 @@ class PduServer:
                                 # 初始请求
                                 await self._send_raw_command(writer, "iostate")
                                 await self._send_raw_command(writer, "PVC_get")
-                                
-                                # 触发实体创建(如果是新设备)
-                                await self._create_entities_for_device(pdu_id)
+
+                                # 仅为全新设备动态创建实体；
+                                # 已注册设备的实体由平台 setup 时统一创建，重连无需重复添加
+                                if is_new_device:
+                                    await self._create_entities_for_device(pdu_id)
+                                else:
+                                    _LOGGER.debug(f"PDU {pdu_id} 为已知设备，跳过实体创建")
                                 
                                 # 启动分口电流抓取任务 (如果启用)
                                 if self.fetch_outlet_current:

@@ -26,5 +26,20 @@
         "abort": {
             "already_configured": "This PDU is already configured"
         }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Changsui PDU Options",
+                "description": "The integration will reload automatically after changes",
+                "data": {
+                    "scan_interval": "Scan Interval (seconds)",
+                    "show_outlet_current": "Show Outlet Current Sensors",
+                    "show_outlet_power": "Show Outlet Power Sensors",
+                    "show_current_limits": "Show Current Limits",
+                    "show_outlet_energy": "Show Outlet Energy Statistics"
+                }
+            }
+        }
     }
 }

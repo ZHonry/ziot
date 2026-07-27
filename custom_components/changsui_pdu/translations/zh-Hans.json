@@ -26,5 +26,20 @@
         "abort": {
             "already_configured": "此 PDU 已配置"
         }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Changsui PDU 选项",
+                "description": "修改后集成将自动重载生效",
+                "data": {
+                    "scan_interval": "轮询间隔(秒)",
+                    "show_outlet_current": "显示插座电流传感器",
+                    "show_outlet_power": "显示插座功率传感器",
+                    "show_current_limits": "显示负载上下限",
+                    "show_outlet_energy": "显示插座能耗统计"
+                }
+            }
+        }
     }
 }

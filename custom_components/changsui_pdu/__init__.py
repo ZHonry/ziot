@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.const import Platform
 
@@ -27,12 +28,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # 创建客户端
     client = PDUClient(host, username, password, outlets)
-    
+
     try:
         await client.login()
     except Exception as e:
-        _LOGGER.error("登录 PDU 失败: %s", e)
-        return False
+        # 抛出 ConfigEntryNotReady，HA 会自动按退避策略重试加载，
+        # 避免设备暂时离线时集成直接加载失败且不再恢复
+        await client.close()
+        raise ConfigEntryNotReady(f"登录 PDU {host} 失败: {e}") from e
+
+    # 初始化能耗追踪器（如果启用）。
+    # 必须在协调器首次刷新前就绪，否则第一轮数据会漏记
+    energy_tracker = None
+    if entry.data.get("show_outlet_energy", False):
+        energy_tracker = EnergyTracker(hass, entry.entry_id)
+        await energy_tracker.async_load()
+        _LOGGER.info("能耗追踪器已初始化")
 
     # 数据更新方法
     async def async_update_data():
@@ -41,16 +52,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             overview = await client.get_pdu_overview()
             outlets_data = await client.get_outlet_status()
             daily_data = await client.get_daily_energy()
-            
+
             # 如果启用了能耗统计，获取插座能耗数据
             outlet_energy_data = []
-            if entry.data.get("show_outlet_energy", False):
+            if energy_tracker is not None:
                 outlet_energy_data = await client.get_outlet_energy()
                 # 更新能耗追踪器
-                if "energy_tracker" in hass.data[DOMAIN].get(entry.entry_id, {}):
-                    tracker = hass.data[DOMAIN][entry.entry_id]["energy_tracker"]
-                    await tracker.update(outlet_energy_data)
-            
+                await energy_tracker.update(outlet_energy_data)
+
             return {
                 "overview": overview,
                 "outlets": outlets_data,
@@ -76,13 +85,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # 首次刷新
     await coordinator.async_config_entry_first_refresh()
 
-    # 初始化能耗追踪器（如果启用）
-    energy_tracker = None
-    if entry.data.get("show_outlet_energy", False):
-        energy_tracker = EnergyTracker(hass, entry.entry_id)
-        await energy_tracker.async_load()
-        _LOGGER.info("能耗追踪器已初始化")
-
     # 存储数据
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
@@ -93,6 +95,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # 设置平台
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # 监听配置/选项变更（OptionsFlow 修改后自动重载生效）
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     return True
 
@@ -114,7 +119,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """重新加载集成"""
+    """重新加载集成（走 HA 标准重载流程）"""
     _LOGGER.info("重新加载 Changsui PDU 集成: %s", entry.entry_id)
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)
+    await hass.config_entries.async_reload(entry.entry_id)
